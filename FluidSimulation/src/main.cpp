@@ -6,6 +6,8 @@
 #include <amp.h>
 #include <amp_math.h>
 
+static void add_source(double* sArray, double* aArray, unsigned int s, double dt);
+
 int main() {
 	const unsigned int xDim = 500;
 	const unsigned int yDim = 500;
@@ -16,17 +18,38 @@ int main() {
 	window.create(sf::VideoMode{ xDim, yDim }, "Fluid Simulation", sf::Style::Close);
 	window.setFramerateLimit(0);
 	clock.restart();
+
+	double* averageArray = new double[xDim * yDim * 3];
+	for (int i = 0; i < xDim * yDim * 3; i++) {
+		averageArray[i] = 0;
+	}
+	concurrency::array_view<double, 3> averages(xDim, yDim, 3, averageArray);  // stored as such: (x, y, [x velocity, y velocity, density])
+
+	double* densityArray = new double[xDim * yDim];
+	for (int i = 0; i < xDim * yDim; i++) {
+		densityArray[i] = 0;
+	}
+	concurrency::array_view<double, 2> densitySources(xDim, yDim, densityArray);
+	densitySources(xDim / 2, yDim / 2) = 10;
+
 	while (window.isOpen()) {
 		// logic and parallel processing
-		//std::vector<unsigned int> pixelVector;  // vector of pixels to be stored and then drawn
-		//pixelVector.resize(size);
 		unsigned int *pixelArray = new unsigned int[size];
 		concurrency::array_view<unsigned int, 3> pixels(xDim, yDim, 4, pixelArray);  // must be stored in in array_view to be used in amp restricted lambda; stored as such: (x, y, [red, blue, green])
 
-		double* averageArray = new double[xDim * yDim * 3];
-		concurrency::array_view<double, 3> averages(xDim, yDim, 3, averageArray);  // stored as such: (x, y, [x velocity, y velocity, pressure])
-		
 		// http://graphics.cs.cmu.edu/nsp/course/15-464/Spring11/papers/StamFluidforGames.pdf
+		
+		concurrency::parallel_for_each(averages.extent,  // update density from density source
+			[=](concurrency::index<3> idx) restrict(amp) {  // "shader"
+			int x = idx[0];
+			int y = idx[1];
+			int value = idx[2];  // RGB
+			if (value == 2) {
+				averages(x, y, value) += densitySources(x, y) * dt;
+			}
+
+		});
+
 		concurrency::parallel_for_each(pixels.extent,
 			[=](concurrency::index<3> idx) restrict(amp) {  // "shader"
 			int x = idx[0];
@@ -35,8 +58,13 @@ int main() {
 			if (channel == 3) {
 				pixels(x, y, channel) = 255;
 			} else {
-				pixels(x, y, channel) = 255 * dt;
+				unsigned int pressure{ static_cast<unsigned int>(averages(x, y, 2)) };
+				if (pressure > 255) {
+					pressure = 255;
+				}
+				pixels(x, y, channel) = pressure;  // draw the pressure
 			}
+			
 		});
 		// synchronize array_view and vector
 		pixels.synchronize();
@@ -76,8 +104,9 @@ int main() {
 		dt = clock.getElapsedTime().asSeconds();
 		clock.restart();
 		delete[] pixelArray;
-		delete[] averageArray;
 		delete[] pixelUINT;
 	}
+	delete[] averageArray;
+	delete[] densityArray;
 	return 0;
 }
