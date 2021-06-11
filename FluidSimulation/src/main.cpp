@@ -6,8 +6,6 @@
 #include <amp.h>
 #include <amp_math.h>
 
-static void add_source(double* sArray, double* aArray, unsigned int s, double dt);
-
 int main() {
 	const unsigned int xDim = 500;
 	const unsigned int yDim = 500;
@@ -31,19 +29,22 @@ int main() {
 	}
 	concurrency::array_view<double, 2> densitySources(xDim, yDim, densityArray);
 	densitySources(xDim / 2, yDim / 2) = 10;
+	unsigned int* pixelArray = new unsigned int[size];
+	for (int i = 0; i < size; i++) {
+		pixelArray[i] = 0;
+	}
+	concurrency::array_view<unsigned int, 3> pixels(xDim, yDim, 4, pixelArray);  // must be stored in in array_view to be used in amp restricted lambda; stored as such: (x, y, [red, blue, green])
+	sf::Uint8* pixelUINT = new sf::Uint8[size];  // used to convert unsigned int arry to sf::Uint8 arry
 
 	while (window.isOpen()) {
 		// logic and parallel processing
-		unsigned int *pixelArray = new unsigned int[size];
-		concurrency::array_view<unsigned int, 3> pixels(xDim, yDim, 4, pixelArray);  // must be stored in in array_view to be used in amp restricted lambda; stored as such: (x, y, [red, blue, green])
-
 		// http://graphics.cs.cmu.edu/nsp/course/15-464/Spring11/papers/StamFluidforGames.pdf
 		
 		concurrency::parallel_for_each(averages.extent,  // update density from density source
 			[=](concurrency::index<3> idx) restrict(amp) {  // "shader"
 			int x = idx[0];
 			int y = idx[1];
-			int value = idx[2];  // RGB
+			int value = idx[2];  // property
 			if (value == 2) {
 				averages(x, y, value) += densitySources(x, y) * dt;
 			}
@@ -81,7 +82,6 @@ int main() {
 		// creating image to manipulate pixels
 		sf::Image image;
 		
-		sf::Uint8* pixelUINT = new sf::Uint8[size];  // used to convert unsigned int arry to sf::Uint8 arry
 		for (int i = 0; i < size; i++) {
 			pixelUINT[i] = pixelArray[i];
 		}
@@ -103,10 +103,10 @@ int main() {
 		window.display();  // display image
 		dt = clock.getElapsedTime().asSeconds();
 		clock.restart();
-		delete[] pixelArray;
-		delete[] pixelUINT;
 	}
 	delete[] averageArray;
 	delete[] densityArray;
+	delete[] pixelArray;
+	delete[] pixelUINT;
 	return 0;
 }
