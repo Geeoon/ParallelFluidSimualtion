@@ -1,4 +1,5 @@
 #include <iostream>
+#include <stdint.h>
 #include <vector>
 #include <array>
 #include <SFML/Graphics.hpp>
@@ -8,20 +9,22 @@
 int main() {
 	const unsigned int xDim = 500;
 	const unsigned int yDim = 500;
-	const unsigned int size = xDim * yDim * 3;
-
+	const unsigned int size = xDim * yDim * 4;
+	sf::Clock clock;
+	double dt = 0;
 	sf::RenderWindow window;
 	window.create(sf::VideoMode{ xDim, yDim }, "Fluid Simulation", sf::Style::Close);
-
+	window.setFramerateLimit(0);
+	clock.restart();
 	while (window.isOpen()) {
 		// logic and parallel processing
-		std::vector<unsigned int> pixelVector;  // vector of pixels to be stored and then drawn
-		pixelVector.resize(size);
-		concurrency::array_view<unsigned int, 3> pixels(xDim, yDim, 3, pixelVector);  // must be stored in in array_view to be used in amp restricted lambda; stored as such: (x, y, [red, blue, green])
+		//std::vector<unsigned int> pixelVector;  // vector of pixels to be stored and then drawn
+		//pixelVector.resize(size);
+		unsigned int *pixelArray = new unsigned int[size];
+		concurrency::array_view<unsigned int, 3> pixels(xDim, yDim, 4, pixelArray);  // must be stored in in array_view to be used in amp restricted lambda; stored as such: (x, y, [red, blue, green])
 
-		std::vector<double> averageVector;  // vector of average parts of screen, it is the same as the pixels, but it is used for storing average data as a double
-		averageVector.resize(size);
-		concurrency::array_view<double, 3> averages(xDim, yDim, 3, averageVector);  // stored as such: (x, y, [x velocity, y velocity, pressure])
+		double* averageArray = new double[xDim * yDim * 3];
+		concurrency::array_view<double, 3> averages(xDim, yDim, 3, averageArray);  // stored as such: (x, y, [x velocity, y velocity, pressure])
 		
 		// http://graphics.cs.cmu.edu/nsp/course/15-464/Spring11/papers/StamFluidforGames.pdf
 		concurrency::parallel_for_each(pixels.extent,
@@ -29,7 +32,11 @@ int main() {
 			int x = idx[0];
 			int y = idx[1];
 			int channel = idx[2];  // RGB
-			pixels(x, y, channel) = 255;
+			if (channel == 3) {
+				pixels(x, y, channel) = 255;
+			} else {
+				pixels(x, y, channel) = 255 * dt;
+			}
 		});
 		// synchronize array_view and vector
 		pixels.synchronize();
@@ -45,14 +52,13 @@ int main() {
 
 		// creating image to manipulate pixels
 		sf::Image image;
-		image.create(xDim, yDim, sf::Color::Black);
-
-		// adding data from array to image
-		for (int x = 0; x < xDim; x++) {
-			for (int y = 0; y < yDim; y++) {
-				image.setPixel(x, y, sf::Color(pixels(x, y, 0), pixels(x, y, 1), pixels(x, y, 2)));
-			}
+		
+		sf::Uint8* pixelUINT = new sf::Uint8[size];  // used to convert unsigned int arry to sf::Uint8 arry
+		for (int i = 0; i < size; i++) {
+			pixelUINT[i] = pixelArray[i];
 		}
+
+		image.create(xDim, yDim, pixelUINT);
 
 		// loading image into texture to be drawn
 		sf::Texture t;
@@ -67,6 +73,11 @@ int main() {
 		// ^^^^^ draw above ^^^^^
 		
 		window.display();  // display image
+		dt = clock.getElapsedTime().asSeconds();
+		clock.restart();
+		delete[] pixelArray;
+		delete[] averageArray;
+		delete[] pixelUINT;
 	}
 	return 0;
 }
