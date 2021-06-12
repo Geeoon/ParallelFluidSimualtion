@@ -90,6 +90,8 @@ int main() {
 		dt = 0.02;
 		// logic and parallel processing
 		// http://graphics.cs.cmu.edu/nsp/course/15-464/Spring11/papers/StamFluidforGames.pdf
+
+		// evolving density
 		concurrency::array_view<double, 3> initialAverages = averages;
 		double a = dt * 100 * xDim * yDim;  // the "100" is a constant that changes how much diffusion there is.
 		concurrency::parallel_for_each(averages.extent,  // update density from density source
@@ -101,7 +103,7 @@ int main() {
 				averages(x, y, value) += densitySources(x, y) * dt;
 			}
 		});
-		
+		initialAverages = averages;
 		concurrency::parallel_for_each(averages.extent,  // diffusion
 			[=](concurrency::index<3> idx) restrict(amp) {  // "shader"
 			int x = idx[0];
@@ -113,7 +115,7 @@ int main() {
 				}
 			}
 		});
-
+		initialAverages = averages;
 		concurrency::parallel_for_each(averages.extent,  // advection
 			[=](concurrency::index<3> idx) restrict(amp) {  // "shader"
 			int i = idx[0];
@@ -148,7 +150,10 @@ int main() {
 			}
 		});
 
+		// evolving velocity
 
+
+		// drawing pressure
 		concurrency::parallel_for_each(pixels.extent,
 			[=](concurrency::index<3> idx) restrict(amp) {  // "shader"
 			int x = idx[0];
