@@ -44,8 +44,7 @@ void advect(unsigned int xDim, unsigned int yDim, concurrency::array_view<double
 			double s0{ 1 - s1 };
 			double t1{ y - j0 };
 			double t0{ 1 - t1 };
-			double out = s0 * (t0 * a0(i0, j0, 3) + t1 * a0(i0, j1, 3)) + s1 * (t0 * a0(i1, j0, 3) + t1 * a0(i1, j1, 3));
-			a(i, j, 3) = out;
+			a(i, j, 2) = s0 * (t0 * a0(i0, j0, 2) + t1 * a0(i0, j1, 2)) + s1 * (t0 * a0(i1, j0, 2) + t1 * a0(i1, j1, 2));
 		}
 	}
 }
