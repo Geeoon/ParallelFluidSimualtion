@@ -80,7 +80,7 @@ void diffuseAMP(unsigned int xDim, unsigned int yDim, unsigned int b, concurrenc
 			int x = idx[0];
 			int y = idx[1];
 			int value = idx[2];  // property
-			if (x != 0 && y != 0 && x != xDim && y != yDim) {
+			if (x != 0 && y != 0 && x < xDim - 1 && y < yDim - 1) {
 				averages(x, y, p) = (initialAverages(x, y, p) + a * (averages(x - 1, y, p) + averages(x + 1, y, p) + averages(x, y - 1, p) + averages(x, y + 1, p))) / (1 + 4 * a);
 			}
 		});
@@ -94,7 +94,7 @@ void advectAMP(unsigned int xDim, unsigned int yDim, unsigned int b, concurrency
 		int i = idx[0];
 		int j = idx[1];
 		int value = idx[2];  // property
-		if (i != 0 && j != 0 && i != xDim && j != yDim) {
+		if (i != 0 && j != 0 && i < xDim - 1 && j < yDim - 1) {
 			double x{ i - dt * xDim * averages(i, j, 0) };
 			double y{ j - dt * yDim * averages(i, j, 1) };
 			if (x < 0.5) {
@@ -131,7 +131,7 @@ void advect1AMP(unsigned int xDim, unsigned int yDim, unsigned int b, concurrenc
 		int i = idx[0];
 		int j = idx[1];
 		int value = idx[2];  // property
-		if (i != 0 && j != 0 && i != xDim && j != yDim) {
+		if (i != 0 && j != 0 && i < xDim - 1 && j < yDim - 1) {
 			double x{ i - dt * xDim * averages(i, j, 0) };
 			double y{ j - dt * yDim * averages(i, j, 1) };
 			if (x < 0.5) {
@@ -170,7 +170,7 @@ void projectAMP(unsigned int xDim, unsigned int yDim, concurrency::array_view<do
 		unsigned int x = idx[0];
 		unsigned int y = idx[1];
 		unsigned int value = idx[2];  // property
-		if (x != 0 && y != 0 && x != xDim - 1 && y != yDim - 1) {
+		if (x != 0 && y != 0 && x < xDim - 1 && y < yDim - 1) {
 			averagesInitial(x, y, 1) = -0.5 * hy * (averages(x + 1, y, 0) - averages(x - 1, y, 0) + averages(x, y + 1, 1) - averages(x, y - 1, 1));
 			averagesInitial(x, y, 0) = 0;
 		}
@@ -184,7 +184,7 @@ void projectAMP(unsigned int xDim, unsigned int yDim, concurrency::array_view<do
 			unsigned int x = idx[0];
 			unsigned int y = idx[1];
 			unsigned int value = idx[2];  // property
-			if (x != 0 && y != 0 && x != xDim - 1 && y != yDim - 1) {
+			if (x != 0 && y != 0 && x < xDim - 1 && y < yDim - 1) {
 				averagesInitial(x, y, 0) = (averagesInitial(x, y, 1) + averagesInitial(x - 1, y, 0) + averagesInitial(x, y - 1, 0) + averagesInitial(x, y + 1, 0)) / 4.0;
 			}
 		});
@@ -196,13 +196,42 @@ void projectAMP(unsigned int xDim, unsigned int yDim, concurrency::array_view<do
 		unsigned int x = idx[0];
 		unsigned int y = idx[1];
 		unsigned int value = idx[2];  // property
-		if (x != 0 && y != 0 && x != xDim - 1 && y != yDim - 1) {
+		if (x != 0 && y != 0 && x < xDim - 1 && y < yDim - 1) {
 			averages(x, y, 0) -= 0.5 * (averagesInitial(x + 1, y, 0) - averagesInitial(x - 1, y, 0)) / hx;
 			averages(x, y, 1) -= 0.5 * (averagesInitial(x, y + 1, 0) - averagesInitial(x, y - 1, 0)) / hy;
 		}
 	});
 	set_bndAMP(xDim, yDim, 1, averagesInitial, 0);
 	set_bndAMP(xDim, yDim, 2, averagesInitial, 1);
+}
+
+void project(unsigned int xDim, unsigned int yDim, concurrency::array_view<double, 3>& averages, concurrency::array_view<double, 3>& averagesInitial) {
+	double hx = 1.0 / xDim;
+	double hy = 1.0 / yDim;
+	for (unsigned int i = 1; i < xDim - 1; i++) {
+		for (unsigned int j = 1; j < yDim - 1; j++) {
+			averagesInitial(i, j, 1) = -0.5 * hy * (averages(i + 1, j, 0) - averages(i - 1, j, 0) + averages(i, j + 1, 1) - averages(i, j - 1, 1));
+			averagesInitial(i, j, 0) = 0;
+		}
+	}
+	//set_bnd initAvg 0,1
+
+	for (size_t k = 0; k < 20; k++) {
+		for (unsigned int i = 1; i < xDim - 1; i++) {
+			for (unsigned int j = 1; j < yDim - 1; j++) {
+				averagesInitial(i, j, 0) = (averagesInitial(i, j, 1) + averagesInitial(i - 1, j, 0) + averagesInitial(i, j - 1, 0) + averagesInitial(i, j + 1, 0)) / 4.0;
+			}
+		}
+		//set_bnd initAvg 0
+	}
+
+	for (unsigned int i = 1; i < xDim - 1; i++) {
+		for (unsigned int j = 1; j < yDim - 1; j++) {
+			averages(i, j, 0) -= 0.5 * (averagesInitial(i + 1, j, 0) - averagesInitial(i - 1, j, 0)) / hx;
+			averages(i, j, 1) -= 0.5 * (averagesInitial(i, j + 1, 0) - averagesInitial(i, j - 1, 0)) / hy;
+		}
+	}
+	//set_bnd avg 0 1
 }
 
 void dens_step(unsigned int xDim, unsigned int yDim, concurrency::array_view<double, 3> &averages, concurrency::array_view<double, 2> &densitySources, double diff, double dt) {
@@ -223,11 +252,11 @@ void vel_step(unsigned int xDim, unsigned int yDim, concurrency::array_view<doub
 	diffuseAMP(xDim, yDim, 1, averages, initialAverages, 0, visc, dt);
 	initialAverages = averages;
 	diffuseAMP(xDim, yDim, 2, averages, initialAverages, 1, visc, dt);
-	projectAMP(xDim, yDim, averages, initialAverages);
+	//project(xDim, yDim, averages, initialAverages);
 	initialAverages = averages;
 	advect1AMP(xDim, yDim, 1, averages, initialAverages, 0, dt);
 	advect1AMP(xDim, yDim, 2, averages, initialAverages, 1, dt);
-	projectAMP(xDim, yDim, averages, initialAverages);
+	//projectAMP(xDim, yDim, averages, initialAverages);
 }
 
 void set_bnd(unsigned int xDim, unsigned int yDim, int b, concurrency::array_view<double, 3>& averages, int val) {
@@ -259,7 +288,7 @@ void set_bnd(unsigned int xDim, unsigned int yDim, int b, concurrency::array_vie
 void diffuse(unsigned int xDim, unsigned int yDim, concurrency::array_view<double, 3> &x, concurrency::array_view<double, 3> &x0, double diff, double dt) {
 	double a = dt * diff * xDim * yDim;
 	for (unsigned int k = 0; k < 20; k++) {
-		for (unsigned int i = 1; i < xDim; i++) {
+		for (unsigned int i = 1; i < xDim - 1; i++) {
 			for (unsigned int j = 1; j < yDim; j++) {
 				x(i, j, 2) = (x0(i, j, 2) + a * (x(i - 1, j, 2) + x(i + 1, j, 2) + x(i, j - 1, 2) + x(i, j + 1, 2))) / (1 + 4 * a);
 			}
@@ -300,38 +329,9 @@ void advect(unsigned int xDim, unsigned int yDim, concurrency::array_view<double
 	}
 }
 
-void project(unsigned int xDim, unsigned int yDim, concurrency::array_view<double, 3>& averages, concurrency::array_view<double, 3>& averagesInitial) {
-	double hx = 1.0 / xDim;
-	double hy = 1.0 / yDim;
-	for (unsigned int i = 1; i < xDim - 1; i++) {
-		for (unsigned int j = 1; j < yDim - 1; j++) {
-			averagesInitial(i, j, 1) = -0.5 * hy * (averages(i + 1, j, 0) - averages(i - 1, j, 0) + averages(i, j + 1, 1) - averages(i, j - 1, 1));
-			averagesInitial(i, j, 0) = 0;
-		}
-	}
-	//set_bnd initAvg 0,1
-
-	for (size_t k = 0; k < 20; k++) {
-		for (unsigned int i = 1; i < xDim - 1; i++) {
-			for (unsigned int j = 1; j < yDim - 1; j++) {
-				averagesInitial(i, j, 0) = (averagesInitial(i, j, 1) + averagesInitial(i - 1, j, 0) + averagesInitial(i, j - 1, 0) + averagesInitial(i, j + 1, 0)) / 4.0;
-			}
-		}
-		//set_bnd initAvg 0
-	}
-
-	for (unsigned int i = 1; i < xDim - 1; i++) {
-		for (unsigned int j = 1; j < yDim - 1; j++) {
-			averages(i, j, 0) -= 0.5 * (averagesInitial(i + 1, j, 0) - averagesInitial(i - 1, j, 0)) / hx;
-			averages(i, j, 1) -= 0.5 * (averagesInitial(i, j + 1, 0) - averagesInitial(i, j - 1, 0)) / hy;
-		}
-	}
-	//set_bnd avg 0 1
-}
-
 int main() {
-	const unsigned int xDim = 100;
-	const unsigned int yDim = 100;
+	const unsigned int xDim = 500;
+	const unsigned int yDim = 500;
 	const unsigned int size = xDim * yDim * 4;
 	sf::Clock clock;
 	double dt = 0;
@@ -345,14 +345,14 @@ int main() {
 		averageArray[i] = 0;
 	}
 	concurrency::array_view<double, 3> averages(xDim, yDim, 3, averageArray);  // stored as such: (x, y, [x velocity, y velocity, density])
-	/*
+	
 	for (auto i = 0; i < xDim; i++) {
 		for (auto j = 0; j < yDim / 2; j++) {
-			averages(i, j, 0) = 0.05;
-			averages(i, j, 1) = 0.05;
+			averages(i, j, 0) = -0.05;
+			//averages(i, j, 1) = 0.05;
 		}
 	}
-	*/
+	
 	double* velocityArray = new double[xDim * yDim * 2];
 	for (auto i = 0; i < xDim * yDim * 2; i++) {
 		velocityArray[i] = 0;
@@ -396,7 +396,10 @@ int main() {
 			if (channel == 3) {
 				pixels(x, y, channel) = 255;  // alpha channel should always be 255
 			} else {
-				double pressure{ averages(x, y, 2) };
+				double pressure{ averages(x, y, channel) };
+				if (channel != 2) {
+					pressure = concurrency::fast_math::fabs(pressure * 255 / 0.1);
+				}
 				if (pressure > 255) {  // clip the pressure so it can be stored in a uint8
 					pressure = 255;
 				}
@@ -420,7 +423,7 @@ int main() {
 					window.close();
 				} break;
 				case (sf::Event::MouseButtonPressed): {
-					densitySources(sf::Mouse::getPosition(window).y, sf::Mouse::getPosition(window).x) = 500000;
+					densitySources(sf::Mouse::getPosition(window).y, sf::Mouse::getPosition(window).x) = 150000;
 				} break;
 			}
 		}
